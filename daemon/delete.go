@@ -24,12 +24,13 @@ import (
 // fails. If the remove succeeds, the container name is released, and
 // network links are removed.
 func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) error {
+	logrus.Debugf("ContainerRm: name %s", name)
 	start := time.Now()
 	ctr, err := daemon.GetContainer(name)
 	if err != nil {
 		return err
 	}
-
+	logrus.Debugf("setRemovalInProgress: name: %s", name)
 	// Container state RemovalInProgress should be used to avoid races.
 	if inProgress := ctr.SetRemovalInProgress(); inProgress {
 		err := fmt.Errorf("removal of container %s is already in progress", name)
@@ -81,6 +82,7 @@ func (daemon *Daemon) rmLink(container *container.Container, name string) error 
 // cleanupContainer unregisters a container from the daemon, stops stats
 // collection and cleanly removes contents and metadata from the filesystem.
 func (daemon *Daemon) cleanupContainer(container *container.Container, config types.ContainerRmConfig) error {
+	logrus.Debugf("cleanupContainer: %s id", container.ID)
 	if container.IsRunning() {
 		if !config.ForceRemove {
 			state := container.StateString()
@@ -111,6 +113,7 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 	//
 	// If you arrived here and know the answer, you earned yourself a picture
 	// of a cute animal of your own choosing.
+	logrus.Debugf("daemon.containerStop: %s timeout 3", container.ID)
 	var stopTimeout = 3
 	if err := daemon.containerStop(context.TODO(), container, containertypes.StopOptions{Timeout: &stopTimeout}); err != nil {
 		return err
@@ -118,15 +121,18 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 
 	// Mark container dead. We don't want anybody to be restarting it.
 	container.Lock()
+	logrus.Debugf("daemon.cleanupContainer Lock: id %s", container.ID)
 	container.Dead = true
 
 	// Save container state to disk. So that if error happens before
 	// container meta file got removed from disk, then a restart of
 	// docker should not make a dead container alive.
+	logrus.Debugf("container.CheckpointTo: id %s", container.ID)
 	if err := container.CheckpointTo(daemon.containersReplica); err != nil && !os.IsNotExist(err) {
 		logrus.Errorf("Error saving dying container to disk: %v", err)
 	}
 	container.Unlock()
+	logrus.Debugf("daemon.cleanupContainer Unlock: id %s", container.ID)
 
 	// When container creation fails and `RWLayer` has not been created yet, we
 	// do not call `ReleaseRWLayer`
@@ -155,8 +161,11 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 	// within it. Having any file open on Windows (without the
 	// FILE_SHARE_DELETE flag) will block it from being deleted.
 	container.Lock()
+	logrus.Debugf("daemon.cleanupContainer Lock2: id %s", container.ID)
+	logrus.Debugf("containersfs.EnsureRemoveAll: id %s root %s", container.ID, container.Root)
 	err := containerfs.EnsureRemoveAll(container.Root)
 	container.Unlock()
+	logrus.Debugf("daemon.cleanupContainer UnLock2: id %s", container.ID)
 	if err != nil {
 		err = errors.Wrapf(err, "unable to remove filesystem for %s", container.ID)
 		container.SetRemovalError(err)
@@ -167,6 +176,7 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 	selinux.ReleaseLabel(container.ProcessLabel)
 	daemon.containers.Delete(container.ID)
 	daemon.containersReplica.Delete(container)
+	logrus.Debugf("daemon.removeMountPoints: id %s ", container.ID)
 	if err := daemon.removeMountPoints(container, config.RemoveVolume); err != nil {
 		logrus.Error(err)
 	}

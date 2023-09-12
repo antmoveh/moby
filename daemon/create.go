@@ -57,6 +57,7 @@ func (daemon *Daemon) ContainerCreateIgnoreImagesArgsEscaped(ctx context.Context
 }
 
 func (daemon *Daemon) containerCreate(ctx context.Context, opts createOpts) (containertypes.CreateResponse, error) {
+	logrus.Debugf("containerCreate: name %s", opts.params.Name)
 	start := time.Now()
 	if opts.params.Config == nil {
 		return containertypes.CreateResponse{}, errdefs.InvalidParameter(errors.New("Config cannot be empty in order to create a container"))
@@ -67,6 +68,7 @@ func (daemon *Daemon) containerCreate(ctx context.Context, opts createOpts) (con
 		return containertypes.CreateResponse{Warnings: warnings}, errdefs.InvalidParameter(err)
 	}
 
+	logrus.Debugf("GetImage: name %s image %s", opts.params.Name, opts.params.Config.Image)
 	if opts.params.Platform == nil && opts.params.Config.Image != "" {
 		img, err := daemon.imageService.GetImage(ctx, opts.params.Config.Image, imagetypes.GetImageOpts{Platform: opts.params.Platform})
 		if err != nil {
@@ -86,6 +88,7 @@ func (daemon *Daemon) containerCreate(ctx context.Context, opts createOpts) (con
 		}
 	}
 
+	logrus.Debugf("verifyNetworkingConfig: name %s", opts.params.Name)
 	err = verifyNetworkingConfig(opts.params.NetworkingConfig)
 	if err != nil {
 		return containertypes.CreateResponse{Warnings: warnings}, errdefs.InvalidParameter(err)
@@ -114,6 +117,7 @@ func (daemon *Daemon) containerCreate(ctx context.Context, opts createOpts) (con
 
 // Create creates a new container from the given configuration with a given name.
 func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *container.Container, retErr error) {
+	logrus.Debugf("daemon.create: name %s", opts.params.Name)
 	var (
 		ctr         *container.Container
 		img         *image.Image
@@ -194,7 +198,7 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 		}
 		ctr.RWLayer = rwLayer
 	}
-
+	logrus.Debugf("idtools.CurrentIdentity: id %s root %s", ctr.ID, ctr.Root)
 	current := idtools.CurrentIdentity()
 	if err := idtools.MkdirAndChown(ctr.Root, 0710, idtools.Identity{UID: current.UID, GID: daemon.IdentityMapping().RootPair().GID}); err != nil {
 		return nil, err
@@ -220,9 +224,11 @@ func (daemon *Daemon) create(ctx context.Context, opts createOpts) (retC *contai
 	runconfig.SetDefaultNetModeIfBlank(ctr.HostConfig)
 
 	daemon.updateContainerNetworkSettings(ctr, endpointsConfigs)
+	logrus.Debugf("daemon.register: id %s", ctr.ID)
 	if err := daemon.Register(ctr); err != nil {
 		return nil, err
 	}
+	logrus.Debugf("daemon.register: id %s completed", ctr.ID)
 	stateCtr.set(ctr.ID, "stopped")
 	daemon.LogContainerEvent(ctr, "create")
 	return ctr, nil

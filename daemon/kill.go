@@ -31,6 +31,7 @@ func (errNoSuchProcess) NotFound() {}
 // for the container to exit.
 // If a signal is given, then just send it to the container and return.
 func (daemon *Daemon) ContainerKill(name, stopSignal string) error {
+	logrus.Debugf("ContainerKill: name %s stopSignal %s", name, stopSignal)
 	var (
 		err error
 		sig = syscall.SIGKILL
@@ -63,8 +64,10 @@ func (daemon *Daemon) ContainerKill(name, stopSignal string) error {
 func (daemon *Daemon) killWithSignal(container *containerpkg.Container, stopSignal syscall.Signal) error {
 	logrus.Debugf("Sending kill signal %d to container %s", stopSignal, container.ID)
 	container.Lock()
+	logrus.Debugf("daemon.KillWithSignal Lock: id %s", container.ID)
 	defer container.Unlock()
 
+	logrus.Debugf("GetRunningTask: id %s", container.ID)
 	task, err := container.GetRunningTask()
 	if err != nil {
 		return err
@@ -98,9 +101,11 @@ func (daemon *Daemon) killWithSignal(container *containerpkg.Container, stopSign
 	}
 
 	if err := task.Kill(context.Background(), stopSignal); err != nil {
+		logrus.Debugf("kill error %s", err.Error())
 		if errdefs.IsNotFound(err) {
 			unpause = false
 			logrus.WithError(err).WithField("container", container.ID).WithField("action", "kill").Debug("container kill failed because of 'container not found' or 'no such process'")
+			logrus.Debugf("container kill failed because of 'container not found' or 'no such process', id %s", container.ID)
 			go func() {
 				// We need to clean up this container but it is possible there is a case where we hit here before the exit event is processed
 				// but after it was fired off.
@@ -109,6 +114,7 @@ func (daemon *Daemon) killWithSignal(container *containerpkg.Container, stopSign
 				// But this prevents race conditions in processing the container.
 				ctx, cancel := context.WithTimeout(context.TODO(), time.Duration(container.StopTimeout())*time.Second)
 				defer cancel()
+				logrus.Debugf("container %s, wait condition not running", container.ID)
 				s := <-container.Wait(ctx, containerpkg.WaitConditionNotRunning)
 				if s.Err() != nil {
 					daemon.handleContainerExit(container, nil)
@@ -126,6 +132,7 @@ func (daemon *Daemon) killWithSignal(container *containerpkg.Container, stopSign
 		}
 	}
 
+	logrus.Debugf("LogContainerEvent container %s, kill signal %d", container.ID, stopSignal)
 	daemon.LogContainerEventWithAttributes(container, "kill", map[string]string{
 		"signal": strconv.Itoa(int(stopSignal)),
 	})
@@ -134,6 +141,7 @@ func (daemon *Daemon) killWithSignal(container *containerpkg.Container, stopSign
 
 // Kill forcefully terminates a container.
 func (daemon *Daemon) Kill(container *containerpkg.Container) error {
+	logrus.Debugf("Kill: id %s", container.ID)
 	if !container.IsRunning() {
 		return errNotRunning(container.ID)
 	}
@@ -154,10 +162,12 @@ func (daemon *Daemon) Kill(container *containerpkg.Container) error {
 	ctx, cancel := context.WithTimeout(context.Background(), waitTimeout)
 	defer cancel()
 
+	logrus.Debugf("wait condition not running container.id %s timeout %s", container.ID, waitTimeout.String())
 	status := <-container.Wait(ctx, containerpkg.WaitConditionNotRunning)
 	if status.Err() == nil {
 		return nil
 	}
+	logrus.Debugf("kill container.id %s error %s", container.ID, status.Err().Error())
 
 	logrus.WithError(status.Err()).WithField("container", container.ID).Errorf("Container failed to exit within %v of kill - trying direct SIGKILL", waitTimeout)
 
@@ -180,6 +190,7 @@ func (daemon *Daemon) Kill(container *containerpkg.Container) error {
 
 // killPossiblyDeadProcess is a wrapper around killSig() suppressing "no such process" error.
 func (daemon *Daemon) killPossiblyDeadProcess(container *containerpkg.Container, sig syscall.Signal) error {
+	logrus.Debugf("KillPossiblyDeadProcess: id %s", container.ID)
 	err := daemon.killWithSignal(container, sig)
 	if errdefs.IsNotFound(err) {
 		err = errNoSuchProcess{container.GetPID(), sig}

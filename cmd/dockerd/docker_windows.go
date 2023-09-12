@@ -11,6 +11,12 @@ import (
 func runDaemon(opts *daemonOptions) error {
 	daemonCli := NewDaemonCli()
 
+	logrus.SetReportCaller(true)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		DisableColors:   true,
+		TimestampFormat: "2006-01-02 15:03:04",
+	})
+
 	// On Windows, this may be launching as a service or with an option to
 	// register the service.
 	stop, runAsService, err := initService(daemonCli)

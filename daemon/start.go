@@ -16,6 +16,7 @@ import (
 
 // ContainerStart starts a container.
 func (daemon *Daemon) ContainerStart(ctx context.Context, name string, hostConfig *containertypes.HostConfig, checkpoint string, checkpointDir string) error {
+	logrus.Debugf("ContainerStart: name %s", name)
 	if checkpoint != "" && !daemon.HasExperimental() {
 		return errdefs.InvalidParameter(errors.New("checkpoint is only supported in experimental mode"))
 	}
@@ -27,6 +28,7 @@ func (daemon *Daemon) ContainerStart(ctx context.Context, name string, hostConfi
 
 	validateState := func() error {
 		ctr.Lock()
+		logrus.Debugf("daemon.ContainerStart Lock: id %s", ctr.ID)
 		defer ctr.Unlock()
 
 		if ctr.Paused {
@@ -100,8 +102,10 @@ func (daemon *Daemon) ContainerStart(ctx context.Context, name string, hostConfi
 // between containers. The container is left waiting for a signal to
 // begin running.
 func (daemon *Daemon) containerStart(ctx context.Context, container *container.Container, checkpoint string, checkpointDir string, resetRestartManager bool) (retErr error) {
+	logrus.Debugf("daemon.containerStart: id %s", container.ID)
 	start := time.Now()
 	container.Lock()
+	logrus.Debugf("daemon.containerStart Lock: id %s", container.ID)
 	defer container.Unlock()
 
 	if resetRestartManager && container.Running { // skip this check if already in restarting step and resetRestartManager==false
@@ -135,22 +139,25 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 			// if containers AutoRemove flag is set, remove it after clean up
 			if container.HostConfig.AutoRemove {
 				container.Unlock()
+				logrus.Debugf("daemon.containerStart UnLock: id %s", container.ID)
 				if err := daemon.ContainerRm(container.ID, &types.ContainerRmConfig{ForceRemove: true, RemoveVolume: true}); err != nil {
 					logrus.Errorf("can't remove container %s: %v", container.ID, err)
 				}
 				container.Lock()
+				logrus.Debugf("daemon.containerStart Lock: id %s", container.ID)
 			}
 		}
 	}()
 
+	logrus.Debugf("daemon.conditionalMountOnStart: id %s", container.ID)
 	if err := daemon.conditionalMountOnStart(container); err != nil {
 		return err
 	}
-
+	logrus.Debugf("daemon.initializeNetworking: id %s", container.ID)
 	if err := daemon.initializeNetworking(container); err != nil {
 		return err
 	}
-
+	logrus.Debugf("daemon.createSpec: id %s", container.ID)
 	spec, err := daemon.createSpec(ctx, container)
 	if err != nil {
 		return errdefs.System(err)
@@ -182,6 +189,7 @@ func (daemon *Daemon) containerStart(ctx context.Context, container *container.C
 		return setExitCodeFromError(container.SetExitCode, err)
 	}
 
+	logrus.Debugf("container.start: id %s", container.ID)
 	// TODO(mlaventure): we need to specify checkpoint options here
 	tsk, err := ctr.Start(context.TODO(), // Passing ctx to ctr.Start caused integration tests to be stuck in the cleanup phase
 		checkpointDir, container.StreamConfig.Stdin() != nil || container.Config.Tty,

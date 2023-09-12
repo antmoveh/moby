@@ -1056,6 +1056,7 @@ func (daemon *Daemon) ConnectToNetwork(container *container.Container, idOrName 
 		endpointConfig = &networktypes.EndpointSettings{}
 	}
 	container.Lock()
+	logrus.Debugf("daemon.ConnectToNetwork Lock: id %s", container.ID)
 	defer container.Unlock()
 
 	if !container.Running {
@@ -1086,6 +1087,7 @@ func (daemon *Daemon) ConnectToNetwork(container *container.Container, idOrName 
 func (daemon *Daemon) DisconnectFromNetwork(container *container.Container, networkName string, force bool) error {
 	n, err := daemon.FindNetwork(networkName)
 	container.Lock()
+	logrus.Debugf("daemon.DisconnectFromNetwork Lock: id %s", container.ID)
 	defer container.Unlock()
 
 	if !container.Running || (err != nil && force) {

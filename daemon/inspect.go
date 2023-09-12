@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -21,6 +22,7 @@ import (
 // container. Returns an error if the container cannot be found, or if
 // there is an error getting the data.
 func (daemon *Daemon) ContainerInspect(ctx context.Context, name string, size bool, version string) (interface{}, error) {
+	logrus.Debugf("ContainerInspect: name %s, size %v version %s", name, size, version)
 	switch {
 	case versions.LessThan(version, "1.20"):
 		return daemon.containerInspectPre120(ctx, name)
@@ -33,13 +35,14 @@ func (daemon *Daemon) ContainerInspect(ctx context.Context, name string, size bo
 // ContainerInspectCurrent returns low-level information about a
 // container in a most recent api version.
 func (daemon *Daemon) ContainerInspectCurrent(ctx context.Context, name string, size bool) (*types.ContainerJSON, error) {
+	logrus.Debugf("ContainerInspectCurrent: name %s, size %v", name, size)
 	ctr, err := daemon.GetContainer(name)
 	if err != nil {
 		return nil, err
 	}
 
 	ctr.Lock()
-
+	logrus.Debugf("daemon.ContainerInspectCurrent Lock: id %s", ctr.ID)
 	base, err := daemon.getInspectData(ctr)
 	if err != nil {
 		ctr.Unlock()
@@ -77,6 +80,7 @@ func (daemon *Daemon) ContainerInspectCurrent(ctx context.Context, name string, 
 	networkSettings.NetworkSettingsBase.Ports = ports
 
 	ctr.Unlock()
+	logrus.Debugf("daemon.ContainerInspectCurrent UnLock: id %s", ctr.ID)
 
 	if size {
 		sizeRw, sizeRootFs, err := daemon.imageService.GetContainerLayerSize(ctx, base.ID)
@@ -103,6 +107,7 @@ func (daemon *Daemon) containerInspect120(name string) (*v1p20.ContainerJSON, er
 	}
 
 	ctr.Lock()
+	logrus.Debugf("daemon.containerInspect120 Lock: name %s", name)
 	defer ctr.Unlock()
 
 	base, err := daemon.getInspectData(ctr)
@@ -125,6 +130,7 @@ func (daemon *Daemon) containerInspect120(name string) (*v1p20.ContainerJSON, er
 }
 
 func (daemon *Daemon) getInspectData(container *container.Container) (*types.ContainerJSONBase, error) {
+	logrus.Debugf("getInspectData: id %s name %s pid %d, state %v", container.ID, container.Name, container.Pid, container.State)
 	// make a copy to play with
 	hostConfig := *container.HostConfig
 
@@ -196,6 +202,7 @@ func (daemon *Daemon) getInspectData(container *container.Container) (*types.Con
 		return nil, errdefs.System(errors.New("RWLayer of container " + container.ID + " is unexpectedly nil"))
 	}
 
+	logrus.Debugf("graphDriverData: id %s", container.ID)
 	graphDriverData, err := container.RWLayer.Metadata()
 	if err != nil {
 		if container.Dead {
@@ -223,6 +230,7 @@ func (daemon *Daemon) ContainerExecInspect(id string) (*backend.ExecInspect, err
 	}
 
 	e.Lock()
+	logrus.Debugf("daemon.ContainerExecInspect Lock: id %s", id)
 	defer e.Unlock()
 	pc := inspectExecProcessConfig(e)
 	var pid int

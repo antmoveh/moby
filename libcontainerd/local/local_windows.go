@@ -703,6 +703,7 @@ func (p *process) Kill(_ context.Context, signal syscall.Signal) error {
 // the full range of signals, signals aren't really implemented on Windows.
 // We fake supporting regular stop and -9 to force kill.
 func (t *task) Kill(_ context.Context, signal syscall.Signal) error {
+	logrus.Debugf("kill task %s", t.id)
 	hcsContainer, err := t.getHCSContainer()
 	if err != nil {
 		return err
@@ -727,11 +728,13 @@ func (t *task) Kill(_ context.Context, signal syscall.Signal) error {
 		// Shut down the container
 		op, err = "shutdown", hcsContainer.Shutdown()
 	}
+	logrus.Debugf("%s command complated, taskid %s", op, t.id)
 	if err != nil {
 		if !hcsshim.IsPending(err) && !hcsshim.IsAlreadyStopped(err) {
 			// ignore errors
 			logger.WithError(err).Errorf("failed to %s hccshim container", op)
 		}
+		logrus.Debugf("failed to %s hccshim container", op)
 	}
 
 	return nil

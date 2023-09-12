@@ -33,26 +33,31 @@ import (
 //     unique enough to only return a single container object
 //     If none of these searches succeed, an error is returned
 func (daemon *Daemon) GetContainer(prefixOrName string) (*container.Container, error) {
+	logrus.Debugf("GetContainer: prefixorname %s", prefixOrName)
 	if len(prefixOrName) == 0 {
 		return nil, errors.WithStack(invalidIdentifier(prefixOrName))
 	}
 
 	if containerByID := daemon.containers.Get(prefixOrName); containerByID != nil {
+		logrus.Debugf("storage1: id %s name %s pid %d state: %v", containerByID.ID, containerByID.Name, containerByID.Pid, containerByID.State)
 		// prefix is an exact match to a full container ID
 		return containerByID, nil
 	}
 
 	// GetByName will match only an exact name provided; we ignore errors
 	if containerByName, _ := daemon.GetByName(prefixOrName); containerByName != nil {
+		logrus.Debugf("storage2: id %s name %s pid %d state: %v", containerByName.ID, containerByName.Name, containerByName.Pid, containerByName.State)
 		// prefix is an exact match to a full container Name
 		return containerByName, nil
 	}
 
+	logrus.Debugf("cache miss: id %s", prefixOrName)
 	containerID, err := daemon.containersReplica.GetByPrefix(prefixOrName)
 	if err != nil {
 		return nil, err
 	}
 	ctr := daemon.containers.Get(containerID)
+	logrus.Debugf("storage3: id %s name %s pid %d state: %v", ctr.ID, ctr.Name, ctr.Pid, ctr.State)
 	if ctr == nil {
 		// Updates to the daemon.containersReplica ViewDB are not atomic
 		// or consistent w.r.t. the live daemon.containers Store so
@@ -122,6 +127,7 @@ func (daemon *Daemon) Register(c *container.Container) error {
 	// once in the memory store it is visible to other goroutines
 	// grab a Lock until it has been checkpointed to avoid races
 	c.Lock()
+	logrus.Debugf("daemon.register Lock: id %s", c.ID)
 	defer c.Unlock()
 
 	daemon.containers.Add(c.ID, c)
@@ -129,6 +135,7 @@ func (daemon *Daemon) Register(c *container.Container) error {
 }
 
 func (daemon *Daemon) newContainer(name string, operatingSystem string, config *containertypes.Config, hostConfig *containertypes.HostConfig, imgID image.ID, managed bool) (*container.Container, error) {
+	logrus.Debugf("daemon.newContainer: name %s operatingSystem %s", name, operatingSystem)
 	var (
 		id             string
 		err            error
@@ -138,6 +145,8 @@ func (daemon *Daemon) newContainer(name string, operatingSystem string, config *
 	if err != nil {
 		return nil, err
 	}
+
+	logrus.Debugf("daemon.newContainer: id %s name %s", id, name)
 
 	if hostConfig.NetworkMode.IsHost() {
 		if config.Hostname == "" {
@@ -208,6 +217,7 @@ func (daemon *Daemon) generateHostname(id string, config *containertypes.Config)
 
 func (daemon *Daemon) setSecurityOptions(container *container.Container, hostConfig *containertypes.HostConfig) error {
 	container.Lock()
+	logrus.Debugf("daemon.setSecurityOptions: %s", container.ID)
 	defer container.Unlock()
 	return daemon.parseSecurityOpt(&container.SecurityOptions, hostConfig)
 }
@@ -220,6 +230,7 @@ func (daemon *Daemon) setHostConfig(container *container.Container, hostConfig *
 	}
 
 	container.Lock()
+	logrus.Debugf("daemon.setHostConfig Lock: id %s", container.ID)
 	defer container.Unlock()
 
 	// Register any links from the host config before starting the container

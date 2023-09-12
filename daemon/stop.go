@@ -21,6 +21,7 @@ import (
 // otherwise the engine default. A negative timeout value can be specified,
 // meaning no timeout, i.e. no forceful termination is performed.
 func (daemon *Daemon) ContainerStop(ctx context.Context, name string, options containertypes.StopOptions) error {
+	logrus.Debugf("ContainerStop: name %s", name)
 	ctr, err := daemon.GetContainer(name)
 	if err != nil {
 		return err
@@ -43,6 +44,8 @@ func (daemon *Daemon) containerStop(_ context.Context, ctr *container.Container,
 	// TODO(thaJeztah): pass context, and use context.WithoutCancel() once available: https://github.com/golang/go/issues/40221
 	ctx := context.Background()
 
+	logrus.Debugf("containerStop: id %s name %s pid %d state %v", ctr.ID, ctr.Name, ctr.Pid, ctr.State)
+
 	if !ctr.IsRunning() {
 		return nil
 	}
@@ -58,10 +61,12 @@ func (daemon *Daemon) containerStop(_ context.Context, ctr *container.Container,
 		}
 		stopSignal = sig
 	}
+	logrus.Debugf("stop signal: %d", stopSignal)
 	if options.Timeout != nil {
 		stopTimeout = *options.Timeout
 	}
 
+	logrus.Debugf("timeout: %d", stopTimeout)
 	var wait time.Duration
 	if stopTimeout >= 0 {
 		wait = time.Duration(stopTimeout) * time.Second
@@ -72,6 +77,7 @@ func (daemon *Daemon) containerStop(_ context.Context, ctr *container.Container,
 		}
 	}()
 
+	logrus.Debugf("id %s, send stop signal", ctr.ID)
 	// 1. Send a stop signal
 	err := daemon.killPossiblyDeadProcess(ctr, stopSignal)
 	if err != nil {

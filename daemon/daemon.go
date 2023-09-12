@@ -1450,6 +1450,7 @@ func CreateDaemonRoot(config *config.Config) error {
 // checkpointAndSave grabs a container lock to safely call container.CheckpointTo
 func (daemon *Daemon) checkpointAndSave(container *container.Container) error {
 	container.Lock()
+	logrus.Debugf("daemon.checkpointAndSave Lock: id %s", container.ID)
 	defer container.Unlock()
 	if err := container.CheckpointTo(daemon.containersReplica); err != nil {
 		return fmt.Errorf("Error saving container state: %v", err)
