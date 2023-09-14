@@ -59,12 +59,15 @@ func (s *Collector) Collect(c *container.Container) chan interface{} {
 // StopCollection closes the channels for all subscribers and removes
 // the container from metrics collection.
 func (s *Collector) StopCollection(c *container.Container) {
+	logrus.Debugf("collector.StopCollection: id %s", c.ID)
 	s.m.Lock()
+	logrus.Debugf("collector.StopCollection Lock: id %s", c.ID)
 	if publisher, exists := s.publishers[c]; exists {
 		publisher.Close()
 		delete(s.publishers, c)
 	}
 	s.m.Unlock()
+	logrus.Debugf("collector.StopCollection unLock: id %s", c.ID)
 }
 
 // Unsubscribe removes a specific subscriber from receiving updates for a container's stats.

@@ -61,12 +61,12 @@ func (daemon *Daemon) containerStop(_ context.Context, ctr *container.Container,
 		}
 		stopSignal = sig
 	}
-	logrus.Debugf("stop signal: %d", stopSignal)
+	logrus.Debugf("containerStop: id %s stop signal: %d", ctr.ID, stopSignal)
 	if options.Timeout != nil {
 		stopTimeout = *options.Timeout
 	}
 
-	logrus.Debugf("timeout: %d", stopTimeout)
+	logrus.Debugf("containerStop: id %s timeout: %d", ctr.ID, stopTimeout)
 	var wait time.Duration
 	if stopTimeout >= 0 {
 		wait = time.Duration(stopTimeout) * time.Second
@@ -77,7 +77,7 @@ func (daemon *Daemon) containerStop(_ context.Context, ctr *container.Container,
 		}
 	}()
 
-	logrus.Debugf("id %s, send stop signal", ctr.ID)
+	logrus.Debugf("containerStop: id %s, send stop signal", ctr.ID)
 	// 1. Send a stop signal
 	err := daemon.killPossiblyDeadProcess(ctr, stopSignal)
 	if err != nil {

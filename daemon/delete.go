@@ -118,6 +118,7 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 	logrus.Debugf("daemon.containerStop: %s timeout 3", container.ID)
 	var stopTimeout = 3
 	if err := daemon.containerStop(context.TODO(), container, containertypes.StopOptions{Timeout: &stopTimeout}); err != nil {
+		logrus.Debugf("daemon.containerStop id %s error %s", container.ID, err.Error())
 		return err
 	}
 
