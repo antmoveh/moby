@@ -24,7 +24,7 @@ import (
 // fails. If the remove succeeds, the container name is released, and
 // network links are removed.
 func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) error {
-	logrus.Debugf("ContainerRm: name %s", name)
+	logrus.Debugf("daemon.ContainerRm: name %s", name)
 	start := time.Now()
 	ctr, err := daemon.GetContainer(name)
 	if err != nil {
@@ -38,6 +38,7 @@ func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) 
 	}
 	defer ctr.ResetRemovalInProgress()
 
+	logrus.Debugf("daemon.ContainerRm Get: id %s", ctr.ID)
 	// check if container wasn't deregistered by previous rm since Get
 	if c := daemon.containers.Get(ctr.ID); c == nil {
 		return nil
@@ -47,6 +48,7 @@ func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) 
 		return daemon.rmLink(ctr, name)
 	}
 
+	logrus.Debugf("daemon.ContainerRm cleanupContainer: id %s", ctr.ID)
 	err = daemon.cleanupContainer(ctr, *config)
 	containerActions.WithValues("delete").UpdateSince(start)
 

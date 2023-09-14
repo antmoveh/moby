@@ -353,7 +353,7 @@ func (s *State) IsRestarting() bool {
 // It returns true if the container was already in that state.
 func (s *State) SetRemovalInProgress() bool {
 	s.Lock()
-	logrus.Debugf("state.SetRemovalInProgress Lock: pid %d", s.GetPID())
+	logrus.Debugf("state.SetRemovalInProgress Lock: pid %d", s.Pid)
 	defer s.Unlock()
 	if s.RemovalInProgress {
 		return true
