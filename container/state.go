@@ -406,11 +406,9 @@ func (s *State) SetRemovalError(err error) {
 // It sets an error and notifies all waiters.
 func (s *State) OnlySetRemovalError(err error) {
 	s.SetError(err)
-	s.Lock()
 	s.Removed = true
 	s.notifyAndClear(&s.removeOnlyWaiters)
 	s.notifyAndClear(&s.stopWaiters)
-	s.Unlock()
 }
 
 // Err returns an error if there is one.
