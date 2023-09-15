@@ -25,4 +25,6 @@ type Store interface {
 	First(StoreFilter) *Container
 	// ApplyAll calls the reducer function with every container in the store.
 	ApplyAll(StoreReducer)
+	// OnlyDelete removes a container from the store by the identifier it was stored with.
+	OnlyDelete(string)
 }

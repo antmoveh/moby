@@ -89,3 +89,18 @@ func (l *linkIndex) delete(container *container.Container) []string {
 	l.mu.Unlock()
 	return aliases
 }
+
+// onlyDelete deletes all link relationships referencing this container
+func (l *linkIndex) onlyDelete(container *container.Container) []string {
+	l.mu.Lock()
+
+	var aliases []string
+	for alias, child := range l.idx[container] {
+		aliases = append(aliases, alias)
+		delete(l.childIdx[child], container)
+	}
+	delete(l.idx, container)
+	delete(l.childIdx, container)
+	l.mu.Unlock()
+	return aliases
+}

@@ -41,6 +41,11 @@ func (c *memoryStore) Delete(id string) {
 	c.Unlock()
 }
 
+// OnlyDelete removes a container from the store by id
+func (c *memoryStore) OnlyDelete(id string) {
+	delete(c.s, id)
+}
+
 // List returns a sorted list of containers from the store.
 // The containers are ordered by creation date.
 func (c *memoryStore) List() []*Container {

@@ -1186,6 +1186,7 @@ func (p *process) reap() {
 
 func (ctr *container) Delete(context.Context) error {
 	ctr.mu.Lock()
+	logrus.Debugf("container.Delete Lock: id %s", ctr.id)
 	defer ctr.mu.Unlock()
 
 	if ctr.hcsContainer == nil {

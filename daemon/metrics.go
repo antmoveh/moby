@@ -98,6 +98,10 @@ func (ctr *stateCounter) del(id string) {
 	ctr.mu.Unlock()
 }
 
+func (ctr *stateCounter) OnlyDel(id string) {
+	delete(ctr.states, id)
+}
+
 func (ctr *stateCounter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- ctr.desc
 }

@@ -3,6 +3,7 @@ package daemon // import "github.com/docker/docker/daemon"
 import (
 	"context"
 	"fmt"
+	"github.com/cloudflare/cfssl/log"
 	"os"
 	"path"
 	"strings"
@@ -30,6 +31,15 @@ func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) 
 	if err != nil {
 		return err
 	}
+	if ctr.Pid == 0 {
+		logrus.Debugf("OnlyCleanupContainer: id %s pid %d", ctr.ID, ctr.Pid)
+		return daemon.onlyCleanupContainer(ctr, *config)
+	}
+	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
+		logrus.Debugf("OnlyCleanupContainer: id %s pid %d", ctr.ID, ctr.Pid)
+		return daemon.onlyCleanupContainer(ctr, *config)
+	}
+
 	logrus.Debugf("setRemovalInProgress: name: %s", name)
 	// Container state RemovalInProgress should be used to avoid races.
 	if inProgress := ctr.SetRemovalInProgress(); inProgress {
@@ -191,4 +201,51 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 
 	daemon.LogContainerEvent(container, "destroy")
 	return nil
+}
+
+func (daemon *Daemon) onlyCleanupContainer(container *container.Container, config types.ContainerRmConfig) error {
+
+	container.Dead = true
+	logrus.Debugf("onlyCleanupContainer.CheckpointTo: id %s", container.ID)
+	if err := container.CheckpointTo(daemon.containersReplica); err != nil && !os.IsNotExist(err) {
+		logrus.Errorf("Error saving dying container to disk: %v", err)
+	}
+
+	err := containerfs.EnsureRemoveAll(container.Root)
+	if err != nil {
+		log.Errorf("remote container id %s fs error %s ", container.ID, err.Error())
+	}
+
+	linkNames := daemon.linkIndex.onlyDelete(container)
+	selinux.ReleaseLabel(container.ProcessLabel)
+	daemon.containers.OnlyDelete(container.ID)
+	daemon.containersReplica.Delete(container)
+	logrus.Debugf("daemon.removeMountPoints: id %s ", container.ID)
+	if err := daemon.removeMountPoints(container, config.RemoveVolume); err != nil {
+		logrus.Error(err)
+	}
+	for _, name := range linkNames {
+		daemon.releaseName(name)
+	}
+	container.OnlySetRemovalError(nil)
+	stateCtr.OnlyDel(container.ID)
+
+	daemon.LogContainerEvent(container, "destroy")
+
+	return nil
+}
+
+func pidExists(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		logrus.Debugf("pidExists pid %d err %s", pid, err.Error())
+		return false
+	} else {
+		err = process.Signal(os.Kill)
+		if err != nil {
+			return false
+		} else {
+			return true
+		}
+	}
 }
