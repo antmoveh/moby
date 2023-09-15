@@ -41,11 +41,11 @@ func (daemon *Daemon) ContainerInspectCurrent(ctx context.Context, name string, 
 		return nil, err
 	}
 
-	ctr.Lock()
+	//ctr.Lock()
 	logrus.Debugf("daemon.ContainerInspectCurrent Lock: id %s", ctr.ID)
 	base, err := daemon.getInspectData(ctr)
 	if err != nil {
-		ctr.Unlock()
+		//ctr.Unlock()
 		return nil, err
 	}
 
@@ -79,7 +79,7 @@ func (daemon *Daemon) ContainerInspectCurrent(ctx context.Context, name string, 
 	}
 	networkSettings.NetworkSettingsBase.Ports = ports
 
-	ctr.Unlock()
+	//ctr.Unlock()
 	logrus.Debugf("daemon.ContainerInspectCurrent UnLock: id %s", ctr.ID)
 
 	if size {
@@ -90,6 +90,8 @@ func (daemon *Daemon) ContainerInspectCurrent(ctx context.Context, name string, 
 		base.SizeRw = &sizeRw
 		base.SizeRootFs = &sizeRootFs
 	}
+
+	logrus.Debugf("daemon.ContainerInspectCurrent complated: id %s", ctr.ID)
 
 	return &types.ContainerJSON{
 		ContainerJSONBase: base,

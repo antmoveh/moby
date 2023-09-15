@@ -33,12 +33,16 @@ func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) 
 		return err
 	}
 	if ctr.Pid == 0 {
-		logrus.Debugf("OnlyCleanupContainer: id %s pid %d", ctr.ID, ctr.Pid)
-		return daemon.onlyCleanupContainer(ctr, *config)
+		logrus.Debugf("onlyCleanupContainer1: id %s pid %d", ctr.ID, ctr.Pid)
+		daemon.onlyCleanupContainer(ctr, *config)
+		containerActions.WithValues("delete").UpdateSince(start)
+		return nil
 	}
 	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
-		logrus.Debugf("OnlyCleanupContainer: id %s pid %d", ctr.ID, ctr.Pid)
-		return daemon.onlyCleanupContainer(ctr, *config)
+		logrus.Debugf("onlyCleanupContainer2: id %s pid %d", ctr.ID, ctr.Pid)
+		daemon.onlyCleanupContainer(ctr, *config)
+		containerActions.WithValues("delete").UpdateSince(start)
+		return nil
 	}
 
 	logrus.Debugf("setRemovalInProgress: name: %s", name)
@@ -206,12 +210,39 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 
 func (daemon *Daemon) onlyCleanupContainer(container *container.Container, config types.ContainerRmConfig) error {
 
+	daemon.statsCollector.StopCollection(container)
+
 	container.Dead = true
 	logrus.Debugf("onlyCleanupContainer.CheckpointTo: id %s", container.ID)
 	if err := container.CheckpointTo(daemon.containersReplica); err != nil && !os.IsNotExist(err) {
 		logrus.Errorf("Error saving dying container to disk: %v", err)
 	}
 
+	if container.RWLayer != nil {
+		logrus.Debugf("daemon.imageService.ReleaseLayer: id %s", container.ID)
+		if err := daemon.imageService.ReleaseLayer(container.RWLayer); err != nil {
+			err = errors.Wrapf(err, "container %s", container.ID)
+			container.OnlySetRemovalError(err)
+			logrus.Debugf("daemon.imageService.ReleaseLayer: id %s err %s", container.ID, err.Error())
+			//return err
+		}
+		container.RWLayer = nil
+	} else {
+		if daemon.UsesSnapshotter() {
+			logrus.Debugf("daemon.UsesSnapshotter: id %s", container.ID)
+			ls := daemon.containerdCli.LeasesService()
+			lease := leases.Lease{
+				ID: container.ID,
+			}
+			if err := ls.Delete(context.Background(), lease, leases.SynchronousDelete); err != nil {
+				container.OnlySetRemovalError(err)
+				logrus.Debugf("daemon.UsesSnapshotter: id %s err %s", container.ID, err.Error())
+				//return err
+			}
+		}
+	}
+
+	logrus.Debugf("daemon.EnsureRemoveAll: id %s", container.ID)
 	err := containerfs.EnsureRemoveAll(container.Root)
 	if err != nil {
 		log.Errorf("remote container id %s fs error %s ", container.ID, err.Error())
@@ -237,6 +268,7 @@ func (daemon *Daemon) onlyCleanupContainer(container *container.Container, confi
 }
 
 func pidExists(pid int) bool {
+	logrus.Debugf("pidExists: pid %d", pid)
 	if pid%4 != 0 {
 		var ret []int32
 		var read uint32 = 0
@@ -267,7 +299,7 @@ func pidExists(pid int) bool {
 			return false
 		}
 	}
-
+	logrus.Debugf("pidExists2: pid %d", pid)
 	h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
 	if err == windows.ERROR_ACCESS_DENIED {
 		return true

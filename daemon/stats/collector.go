@@ -70,6 +70,16 @@ func (s *Collector) StopCollection(c *container.Container) {
 	logrus.Debugf("collector.StopCollection unLock: id %s", c.ID)
 }
 
+// OnlyStopCollection closes the channels for all subscribers and removes
+// the container from metrics collection.
+func (s *Collector) OnlyStopCollection(c *container.Container) {
+	logrus.Debugf("collector.OnlyStopCollection: id %s", c.ID)
+	if publisher, exists := s.publishers[c]; exists {
+		publisher.Close()
+		delete(s.publishers, c)
+	}
+}
+
 // Unsubscribe removes a specific subscriber from receiving updates for a container's stats.
 func (s *Collector) Unsubscribe(c *container.Container, ch chan interface{}) {
 	s.m.Lock()
