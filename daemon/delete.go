@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/cloudflare/cfssl/log"
+	"golang.org/x/sys/windows"
 	"os"
 	"path"
 	"strings"
@@ -236,16 +237,48 @@ func (daemon *Daemon) onlyCleanupContainer(container *container.Container, confi
 }
 
 func pidExists(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		logrus.Debugf("pidExists pid %d err %s", pid, err.Error())
-		return false
-	} else {
-		err = process.Signal(os.Kill)
-		if err != nil {
+	if pid%4 != 0 {
+		var ret []int32
+		var read uint32 = 0
+		var psSize uint32 = 1024
+		const dwordSize uint32 = 4
+
+		for {
+			ps := make([]uint32, psSize)
+			if err := windows.EnumProcesses(ps, &read); err != nil {
+				logrus.Debugf("windows.EnumProcesses: err %s", err.Error())
+				break
+			}
+			if uint32(len(ps)) == read { // ps buffer was too small to host every results, retry with a bigger one
+				psSize += 1024
+				continue
+			}
+			for _, pid := range ps[:read/dwordSize] {
+				ret = append(ret, int32(pid))
+			}
+			break
+		}
+		if len(ret) > 0 {
+			for _, i := range ret {
+				if i == int32(pid) {
+					return true
+				}
+			}
 			return false
-		} else {
-			return true
 		}
 	}
+
+	h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+	if err == windows.ERROR_ACCESS_DENIED {
+		return true
+	}
+	if err == windows.ERROR_INVALID_PARAMETER {
+		return false
+	}
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(h)
+	event, err := windows.WaitForSingleObject(h, 0)
+	return event == uint32(windows.WAIT_TIMEOUT)
 }
