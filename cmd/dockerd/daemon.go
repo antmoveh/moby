@@ -895,7 +895,7 @@ func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon) {
 	for {
 		select {
 		case <-ticker.C:
-			if len(os.Getenv("CLEANWINFILTER")) == 0 {
+			if !folderexists(path.Join(root, "CLEANWINFILTER")) && len(os.Getenv("CLEANWINFILTER")) == 0 {
 				logrus.Debug("No cleanup is performed without the environment variable CLEANWINFILTER")
 				continue
 			}
