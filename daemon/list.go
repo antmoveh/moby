@@ -212,12 +212,11 @@ func (daemon *Daemon) reduceContainers(ctx context.Context, config *types.Contai
 			break
 		}
 		if t != nil {
-			logrus.Debugf("daemon.reduceContainers: id %s state %s status %s", t.ID, t.State, t.Status)
 			containers = append(containers, t)
 			filter.idx++
 		}
 	}
-
+	logrus.Debugf("daemon.reduceContainers: count %d", len(containers))
 	return containers, nil
 }
 

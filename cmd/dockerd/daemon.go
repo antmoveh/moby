@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/Microsoft/hcsshim"
+	"github.com/docker/docker/api/types/filters"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -276,6 +279,9 @@ func (cli *DaemonCli) start(opts *daemonOptions) (err error) {
 
 	// after the daemon is done setting up we can notify systemd api
 	notifyReady()
+
+	// clean windows filter
+	go cleanWindowsFilter(ctx, cli.Config.Root, d)
 
 	// Daemon is fully initialized. Start handling API traffic
 	// and wait for serve API to complete.
@@ -880,4 +886,78 @@ func overrideProxyEnv(name, val string) {
 		}).Warn("overriding existing proxy variable with value from configuration")
 	}
 	_ = os.Setenv(name, val)
+}
+
+func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon) {
+	logrus.Info("Set the environment variable CLEANWINFILTER to clean the container every five minutes")
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if len(os.Getenv("CLEANWINFILTER")) == 0 {
+				logrus.Debug("No cleanup is performed without the environment variable CLEANWINFILTER")
+				continue
+			}
+			logrus.Debug("ContainerPrune task")
+			_, err := d.ContainersPrune(ctx, filters.NewArgs())
+			if err != nil {
+				logrus.Debugf("ContainersPrune: err %s", err.Error())
+			}
+			logrus.Debug("clear the residual win filter directory")
+			containers := map[string]bool{}
+			needDeleteContainers := map[string]bool{}
+			files, err := os.ReadDir(path.Join(root, "containers"))
+			if err != nil {
+				logrus.Debugf("Failed to read containers directory %s", err.Error())
+				continue
+			}
+			for _, file := range files {
+				containers[file.Name()] = true
+			}
+			files2, err := os.ReadDir(path.Join(root, "windowsfilter"))
+			if err != nil {
+				logrus.Debugf("Failed to read win filter directory %s", err.Error())
+				continue
+			}
+			for _, file := range files2 {
+				if _, ok := containers[file.Name()]; !ok {
+					needDeleteContainers[file.Name()] = false
+				}
+			}
+			for k, _ := range needDeleteContainers {
+				f := path.Join(root, "windowsfilter", k)
+				if folderexists(path.Join(f, "Files")) {
+					logrus.Debugf("Skip deleting the image file %s", k)
+					continue
+				}
+				err = os.RemoveAll(f)
+				if err != nil {
+					logrus.Debugf("Unable to remove directory %s %s, now use hcsshim delete", f, err.Error())
+					info := hcsshim.DriverInfo{
+						Flavour: 0,
+						HomeDir: path.Join(root, "windowsfilter"),
+					}
+					err = hcsshim.DestroyLayer(info, k)
+					if err != nil {
+						logrus.Debugf("hcsshim unable destroyLayer %s %s", f, err.Error())
+					}
+				}
+			}
+		case <-ctx.Done():
+			logrus.Debug("End the scheduled clearing task")
+			return
+		}
+	}
+}
+
+func folderexists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return true
 }

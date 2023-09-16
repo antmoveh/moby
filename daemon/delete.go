@@ -210,7 +210,7 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 
 func (daemon *Daemon) onlyCleanupContainer(container *container.Container, config types.ContainerRmConfig) error {
 
-	daemon.statsCollector.StopCollection(container)
+	daemon.statsCollector.OnlyStopCollection(container)
 
 	container.Dead = true
 	logrus.Debugf("onlyCleanupContainer.CheckpointTo: id %s", container.ID)
