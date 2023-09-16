@@ -32,15 +32,16 @@ func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) 
 	if err != nil {
 		return err
 	}
+
 	if ctr.Pid == 0 {
 		logrus.Debugf("onlyCleanupContainer1: id %s pid %d", ctr.ID, ctr.Pid)
-		daemon.onlyCleanupContainer(ctr, *config)
+		daemon.onlyCleanupContainer(ctr, *config, false)
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
 	}
 	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
 		logrus.Debugf("onlyCleanupContainer2: id %s pid %d", ctr.ID, ctr.Pid)
-		daemon.onlyCleanupContainer(ctr, *config)
+		daemon.onlyCleanupContainer(ctr, *config, false)
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
 	}
@@ -208,7 +209,7 @@ func (daemon *Daemon) cleanupContainer(container *container.Container, config ty
 	return nil
 }
 
-func (daemon *Daemon) onlyCleanupContainer(container *container.Container, config types.ContainerRmConfig) error {
+func (daemon *Daemon) onlyCleanupContainer(container *container.Container, config types.ContainerRmConfig, force bool) error {
 
 	daemon.statsCollector.OnlyStopCollection(container)
 
@@ -218,26 +219,28 @@ func (daemon *Daemon) onlyCleanupContainer(container *container.Container, confi
 		logrus.Errorf("Error saving dying container to disk: %v", err)
 	}
 
-	if container.RWLayer != nil {
-		logrus.Debugf("daemon.imageService.ReleaseLayer: id %s", container.ID)
-		if err := daemon.imageService.ReleaseLayer(container.RWLayer); err != nil {
-			err = errors.Wrapf(err, "container %s", container.ID)
-			container.OnlySetRemovalError(err)
-			logrus.Debugf("daemon.imageService.ReleaseLayer: id %s err %s", container.ID, err.Error())
-			//return err
-		}
-		container.RWLayer = nil
-	} else {
-		if daemon.UsesSnapshotter() {
-			logrus.Debugf("daemon.UsesSnapshotter: id %s", container.ID)
-			ls := daemon.containerdCli.LeasesService()
-			lease := leases.Lease{
-				ID: container.ID,
-			}
-			if err := ls.Delete(context.Background(), lease, leases.SynchronousDelete); err != nil {
+	if len(os.Getenv("skipDeleteLayer")) == 0 || !force {
+		if container.RWLayer != nil {
+			logrus.Debugf("daemon.imageService.ReleaseLayer: id %s", container.ID)
+			if err := daemon.imageService.ReleaseLayer(container.RWLayer); err != nil {
+				err = errors.Wrapf(err, "container %s", container.ID)
 				container.OnlySetRemovalError(err)
-				logrus.Debugf("daemon.UsesSnapshotter: id %s err %s", container.ID, err.Error())
+				logrus.Debugf("daemon.imageService.ReleaseLayer: id %s err %s", container.ID, err.Error())
 				//return err
+			}
+			container.RWLayer = nil
+		} else {
+			if daemon.UsesSnapshotter() {
+				logrus.Debugf("daemon.UsesSnapshotter: id %s", container.ID)
+				ls := daemon.containerdCli.LeasesService()
+				lease := leases.Lease{
+					ID: container.ID,
+				}
+				if err := ls.Delete(context.Background(), lease, leases.SynchronousDelete); err != nil {
+					container.OnlySetRemovalError(err)
+					logrus.Debugf("daemon.UsesSnapshotter: id %s err %s", container.ID, err.Error())
+					//return err
+				}
 			}
 		}
 	}
@@ -313,4 +316,37 @@ func pidExists(pid int) bool {
 	defer windows.CloseHandle(h)
 	event, err := windows.WaitForSingleObject(h, 0)
 	return event == uint32(windows.WAIT_TIMEOUT)
+}
+
+// OnlyContainerRm removes the container id from the filesystem. An error
+// is returned if the container is not found, or if the remove
+// fails. If the remove succeeds, the container name is released, and
+// network links are removed.
+func (daemon *Daemon) OnlyContainerRm(name string, config *types.ContainerRmConfig, force bool) error {
+	logrus.Debugf("daemon.ContainerRm: name %s", name)
+	start := time.Now()
+	ctr, err := daemon.GetContainer(name)
+	if err != nil {
+		logrus.Debugf("daemon.ContainerRm: id %s err %s", name, err.Error())
+		return nil
+	}
+	if force {
+		logrus.Debugf("onlyCleanupContainer force delete: id %s pid %d", ctr.ID, ctr.Pid)
+		daemon.onlyCleanupContainer(ctr, *config, force)
+		containerActions.WithValues("delete").UpdateSince(start)
+		return nil
+	}
+	if ctr.Pid == 0 {
+		logrus.Debugf("onlyCleanupContainer1: id %s pid %d", ctr.ID, ctr.Pid)
+		daemon.onlyCleanupContainer(ctr, *config, force)
+		containerActions.WithValues("delete").UpdateSince(start)
+		return nil
+	}
+	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
+		logrus.Debugf("onlyCleanupContainer2: id %s pid %d", ctr.ID, ctr.Pid)
+		daemon.onlyCleanupContainer(ctr, *config, force)
+		containerActions.WithValues("delete").UpdateSince(start)
+		return nil
+	}
+	return nil
 }

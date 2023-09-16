@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/Microsoft/hcsshim"
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"net"
 	"net/http"
@@ -281,7 +282,7 @@ func (cli *DaemonCli) start(opts *daemonOptions) (err error) {
 	notifyReady()
 
 	// clean windows filter
-	go cleanWindowsFilter(ctx, cli.Config.Root, d)
+	go cleanWindowsFilter(ctx, cli.Config.Root, d, opts)
 
 	// Daemon is fully initialized. Start handling API traffic
 	// and wait for serve API to complete.
@@ -888,61 +889,37 @@ func overrideProxyEnv(name, val string) {
 	_ = os.Setenv(name, val)
 }
 
-func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon) {
-	logrus.Info("Set the environment variable CLEANWINFILTER to clean the container every five minutes")
-	ticker := time.NewTicker(5 * time.Minute)
+func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon, opts *daemonOptions) {
+	if len(os.Getenv("skipDeleteLayer")) > 0 {
+		opts.GCContainer = true
+	}
+
+	if !opts.GCContainer {
+		logrus.Debug("GCContainer is false")
+		return
+	}
+	logrus.Debug("GCContainer is true")
+	t := opts.GCTime
+	if t <= 0 {
+		t = 5
+	}
+	ticker := time.NewTicker(time.Duration(t) * time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			if !folderexists(path.Join(root, "CLEANWINFILTER")) && len(os.Getenv("CLEANWINFILTER")) == 0 {
-				logrus.Debug("No cleanup is performed without the environment variable CLEANWINFILTER")
-				continue
-			}
-			logrus.Debug("ContainerPrune task")
-			_, err := d.ContainersPrune(ctx, filters.NewArgs())
-			if err != nil {
-				logrus.Debugf("ContainersPrune: err %s", err.Error())
-			}
-			logrus.Debug("clear the residual win filter directory")
-			containers := map[string]bool{}
-			needDeleteContainers := map[string]bool{}
-			files, err := os.ReadDir(path.Join(root, "containers"))
-			if err != nil {
-				logrus.Debugf("Failed to read containers directory %s", err.Error())
-				continue
-			}
-			for _, file := range files {
-				containers[file.Name()] = true
-			}
-			files2, err := os.ReadDir(path.Join(root, "windowsfilter"))
-			if err != nil {
-				logrus.Debugf("Failed to read win filter directory %s", err.Error())
-				continue
-			}
-			for _, file := range files2 {
-				if _, ok := containers[file.Name()]; !ok {
-					needDeleteContainers[file.Name()] = false
-				}
-			}
-			for k, _ := range needDeleteContainers {
-				f := path.Join(root, "windowsfilter", k)
-				if folderexists(path.Join(f, "Files")) {
-					logrus.Debugf("Skip deleting the image file %s", k)
-					continue
-				}
-				err = os.RemoveAll(f)
+			if opts.GCPrune {
+				logrus.Debug("ContainerPrune task start")
+				_, err := d.ContainersPrune(ctx, filters.NewArgs())
 				if err != nil {
-					logrus.Debugf("Unable to remove directory %s %s, now use hcsshim delete", f, err.Error())
-					info := hcsshim.DriverInfo{
-						Flavour: 0,
-						HomeDir: path.Join(root, "windowsfilter"),
-					}
-					err = hcsshim.DestroyLayer(info, k)
-					if err != nil {
-						logrus.Debugf("hcsshim unable destroyLayer %s %s", f, err.Error())
-					}
+					logrus.Debugf("ContainersPrune: err %s", err.Error())
 				}
+			}
+			if opts.GCContainer {
+				gcContainerLayers(root, opts)
+			}
+			if len(opts.GCDir) > 0 {
+				gcContainerDir(opts.GCDir, d)
 			}
 		case <-ctx.Done():
 			logrus.Debug("End the scheduled clearing task")
@@ -960,4 +937,109 @@ func folderexists(path string) bool {
 		return false
 	}
 	return true
+}
+
+func gcContainerLayers(root string, opts *daemonOptions) {
+	logrus.Debug("gcContainerLayers")
+	containers := map[string]bool{}
+	needDeleteContainers := map[string]bool{}
+	files, err := os.ReadDir(path.Join(root, "containers"))
+	if err != nil {
+		logrus.Debugf("Failed to read containers directory %s", err.Error())
+		return
+	}
+	for _, file := range files {
+		containers[file.Name()] = true
+	}
+	files2, err := os.ReadDir(path.Join(root, "windowsfilter"))
+	if err != nil {
+		logrus.Debugf("Failed to read win filter directory %s", err.Error())
+		return
+	}
+	for _, file := range files2 {
+		if _, ok := containers[file.Name()]; !ok {
+			needDeleteContainers[file.Name()] = false
+		}
+	}
+	for k, _ := range needDeleteContainers {
+		f := path.Join(root, "windowsfilter", k)
+		if folderexists(path.Join(f, "Files")) {
+			logrus.Debugf("Skip deleting the image file %s", k)
+			continue
+		}
+		fi, err := os.Stat(f)
+		if err == nil {
+			if time.Now().Sub(fi.ModTime()).Seconds() < 30 {
+				logrus.Debugf("Skip deleting the layer file %s , modTime %s", k, fi.ModTime().String())
+				continue
+			}
+		}
+
+		err = os.RemoveAll(f)
+		if err != nil {
+			if !opts.GCHcs {
+				logrus.Debugf("Unable to remove container layers %s %s", k, err.Error())
+				continue
+			}
+			logrus.Debugf("delete error %s, use hcsshim delete %s", err.Error(), k)
+			info := hcsshim.DriverInfo{
+				Flavour: 0,
+				HomeDir: path.Join(root, "windowsfilter"),
+			}
+			err = hcsshim.DestroyLayer(info, k)
+			if err != nil {
+				logrus.Debugf("hcsshim unable destroyLayer %s %s", k, err.Error())
+				continue
+			}
+			logrus.Debugf("hcsshim delete success %s", k)
+		}
+		logrus.Debugf("Remove container layers success %s", k)
+	}
+}
+
+func gcContainerDir(dir string, d *daemon.Daemon) {
+	logrus.Debug("gcContainerDir")
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		logrus.Debugf("Failed to read containers directory %s  %s", dir, err.Error())
+		return
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		containerId := file.Name()
+		if strings.HasPrefix(containerId, "delete") {
+			continue
+		}
+		force := false
+		fi, err := os.Stat(path.Join(dir, containerId))
+		t1 := time.Now().Sub(fi.ModTime()).Seconds()
+		if err == nil {
+			if t1 < 30 {
+				logrus.Debugf("wait deleting the container 30s, modTime %s", fi.ModTime().String())
+				continue
+			}
+		}
+		if t1 > 120 {
+			force = true
+		}
+		logrus.Debugf("gcContainerDir container rm: %s", containerId)
+		conf := &types.ContainerRmConfig{
+			ForceRemove:  true,
+			RemoveVolume: false,
+			RemoveLink:   false,
+		}
+		err = d.OnlyContainerRm(containerId, conf, force)
+		if err != nil {
+			logrus.Debugf("container rm error %s", err.Error())
+			continue
+		}
+		logrus.Debugf("container %s rm success", containerId)
+		err = os.Rename(path.Join(dir, containerId), path.Join(dir, "delete_"+containerId))
+		if err != nil {
+			logrus.Debugf("rename error %s %s", containerId, err.Error())
+		}
+	}
 }
