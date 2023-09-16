@@ -890,7 +890,7 @@ func overrideProxyEnv(name, val string) {
 
 func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon) {
 	logrus.Info("Set the environment variable CLEANWINFILTER to clean the container every five minutes")
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
