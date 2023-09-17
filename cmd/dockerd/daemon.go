@@ -891,6 +891,7 @@ func overrideProxyEnv(name, val string) {
 
 func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon, opts *daemonOptions) {
 	if len(os.Getenv("skipDeleteLayer")) > 0 {
+		logrus.Debug("skipDeleteLayer is true")
 		opts.GCContainer = true
 	}
 
