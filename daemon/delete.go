@@ -253,7 +253,7 @@ func (daemon *Daemon) onlyCleanupContainer(container *container.Container, confi
 
 	linkNames := daemon.linkIndex.onlyDelete(container)
 	selinux.ReleaseLabel(container.ProcessLabel)
-	daemon.containers.OnlyDelete(container.ID)
+	daemon.containers.Delete(container.ID)
 	daemon.containersReplica.Delete(container)
 	logrus.Debugf("daemon.removeMountPoints: id %s ", container.ID)
 	if err := daemon.removeMountPoints(container, config.RemoveVolume); err != nil {
