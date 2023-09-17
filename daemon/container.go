@@ -57,7 +57,9 @@ func (daemon *Daemon) GetContainer(prefixOrName string) (*container.Container, e
 		return nil, err
 	}
 	ctr := daemon.containers.Get(containerID)
-	logrus.Debugf("storage3: id %s name %s pid %d state: %v", ctr.ID, ctr.Name, ctr.Pid, ctr.State)
+	if ctr != nil {
+		logrus.Debugf("storage3: id %s name %s pid %d state: %v", ctr.ID, ctr.Name, ctr.Pid, ctr.State)
+	}
 	if ctr == nil {
 		// Updates to the daemon.containersReplica ViewDB are not atomic
 		// or consistent w.r.t. the live daemon.containers Store so
