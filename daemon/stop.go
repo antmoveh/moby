@@ -26,9 +26,17 @@ func (daemon *Daemon) ContainerStop(ctx context.Context, name string, options co
 	if err != nil {
 		return err
 	}
-	if !ctr.IsRunning() {
-		return containerNotModifiedError{}
+	logrus.Debugf("ContainerStop Check Pid: id %s, pid %d", ctr.ID, ctr.Pid)
+	if !ctr.IsRunning() || ctr.Pid == 0 {
+		return nil
 	}
+	if !pidExists(ctr.Pid) {
+		return nil
+	}
+	logrus.Debugf("ContainerStop Send Signal: id %s, pid %d", ctr.ID, ctr.Pid)
+	//if !ctr.IsRunning() {
+	//	return containerNotModifiedError{}
+	//}
 	err = daemon.containerStop(ctx, ctr, options)
 	if err != nil {
 		return errdefs.System(errors.Wrapf(err, "cannot stop container: %s", name))

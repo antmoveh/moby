@@ -49,6 +49,14 @@ func (daemon *Daemon) ContainerKill(name, stopSignal string) error {
 	if err != nil {
 		return err
 	}
+	logrus.Debugf("ContainerKill Check Pid: id %s, pid %d", container.ID, container.Pid)
+	if !container.IsRunning() || container.Pid == 0 {
+		return nil
+	}
+	if !pidExists(container.Pid) {
+		return nil
+	}
+	logrus.Debugf("ContainerKill Send Signal: id %s, pid %d", container.ID, container.Pid)
 	if sig == syscall.SIGKILL {
 		// perform regular Kill (SIGKILL + wait())
 		return daemon.Kill(container)
