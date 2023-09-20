@@ -256,3 +256,38 @@ func matchLabels(pruneFilters filters.Args, labels map[string]string) bool {
 	}
 	return true
 }
+
+// OnlyContainersPrune removes unused containers
+func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
+	logrus.Debug("OnlyContainerPrune: Traverse the stop container")
+	allContainers := daemon.List()
+	for _, c := range allContainers {
+		select {
+		case <-ctx.Done():
+			logrus.Debug("OnlyContainerPrune operation cancelled: ")
+			return nil
+		default:
+		}
+
+		if !c.IsRunning() || c.Pid == 0 {
+			err := daemon.OnlyContainerRm(c.ID, &types.ContainerRmConfig{ForceRemove: true}, true)
+			if err != nil {
+				logrus.Debugf("Failed to delete container id %s %s", c.ID, err.Error())
+				continue
+			}
+		}
+		if c.IsRunning() {
+			if !pidExists(c.Pid) {
+				err := daemon.OnlyContainerRm(c.ID, &types.ContainerRmConfig{ForceRemove: true}, true)
+				if err != nil {
+					logrus.Debugf("Failed to delete container id %s %s", c.ID, err.Error())
+					continue
+				}
+			}
+		}
+	}
+	daemon.EventsService.Log("prune", events.ContainerEventType, events.Actor{
+		Attributes: map[string]string{"reclaimed": strconv.FormatUint(0, 10)},
+	})
+	return nil
+}

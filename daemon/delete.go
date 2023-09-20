@@ -35,13 +35,13 @@ func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) 
 
 	if ctr.Pid == 0 {
 		logrus.Debugf("onlyCleanupContainer1: id %s pid %d", ctr.ID, ctr.Pid)
-		daemon.onlyCleanupContainer(ctr, *config, false)
+		daemon.onlyCleanupContainer(ctr, *config, true)
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
 	}
 	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
 		logrus.Debugf("onlyCleanupContainer2: id %s pid %d", ctr.ID, ctr.Pid)
-		daemon.onlyCleanupContainer(ctr, *config, false)
+		daemon.onlyCleanupContainer(ctr, *config, true)
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
 	}
@@ -219,7 +219,7 @@ func (daemon *Daemon) onlyCleanupContainer(container *container.Container, confi
 		logrus.Errorf("Error saving dying container to disk: %v", err)
 	}
 
-	if len(os.Getenv("skipDeleteLayer")) == 0 || !force {
+	if force {
 		if container.RWLayer != nil {
 			logrus.Debugf("daemon.imageService.ReleaseLayer: id %s", container.ID)
 			if err := daemon.imageService.ReleaseLayer(container.RWLayer); err != nil {
@@ -338,13 +338,13 @@ func (daemon *Daemon) OnlyContainerRm(name string, config *types.ContainerRmConf
 	}
 	if ctr.Pid == 0 {
 		logrus.Debugf("onlyCleanupContainer1: id %s pid %d", ctr.ID, ctr.Pid)
-		daemon.onlyCleanupContainer(ctr, *config, force)
+		daemon.onlyCleanupContainer(ctr, *config, true)
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
 	}
 	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
 		logrus.Debugf("onlyCleanupContainer2: id %s pid %d", ctr.ID, ctr.Pid)
-		daemon.onlyCleanupContainer(ctr, *config, force)
+		daemon.onlyCleanupContainer(ctr, *config, true)
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
 	}

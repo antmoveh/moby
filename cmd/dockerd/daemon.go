@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/Microsoft/hcsshim"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
 	"net"
 	"net/http"
 	"os"
@@ -890,16 +889,7 @@ func overrideProxyEnv(name, val string) {
 }
 
 func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon, opts *daemonOptions) {
-	if len(os.Getenv("skipDeleteLayer")) > 0 {
-		logrus.Debug("skipDeleteLayer is true")
-		opts.GCContainer = true
-	}
-
-	if !opts.GCContainer {
-		logrus.Debug("GCContainer is false")
-		return
-	}
-	logrus.Debug("GCContainer is true")
+	logrus.Debug("Start GCContainer")
 	t := opts.GCTime
 	if t <= 0 {
 		t = 5
@@ -911,14 +901,12 @@ func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon, opts
 		case <-ticker.C:
 			if opts.GCPrune {
 				logrus.Debug("ContainerPrune task start")
-				_, err := d.ContainersPrune(ctx, filters.NewArgs())
+				err := d.OnlyContainersPrune(ctx)
 				if err != nil {
 					logrus.Debugf("ContainersPrune: err %s", err.Error())
 				}
 			}
-			if opts.GCContainer {
-				gcContainerLayers(root, opts)
-			}
+			gcContainerLayers(root, opts)
 			if len(opts.GCDir) > 0 {
 				gcContainerDir(opts.GCDir, d)
 			}
