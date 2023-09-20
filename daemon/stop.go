@@ -51,7 +51,6 @@ func (daemon *Daemon) containerStop(_ context.Context, ctr *container.Container,
 	//
 	// TODO(thaJeztah): pass context, and use context.WithoutCancel() once available: https://github.com/golang/go/issues/40221
 	ctx := context.Background()
-
 	logrus.Debugf("containerStop: id %s name %s pid %d state %v", ctr.ID, ctr.Name, ctr.Pid, ctr.State)
 
 	if !ctr.IsRunning() {

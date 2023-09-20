@@ -1175,15 +1175,28 @@ func (daemon *Daemon) waitForStartupDone() {
 }
 
 func (daemon *Daemon) shutdownContainer(c *container.Container) error {
-	// If container failed to exit in stopTimeout seconds of SIGTERM, then using the force
-	if err := daemon.containerStop(context.TODO(), c, containertypes.StopOptions{}); err != nil {
-		return fmt.Errorf("Failed to stop container %s with error: %v", c.ID, err)
+	if !c.IsRunning() || c.Pid == 0 {
+		return nil
 	}
+	go func() {
+		// If container failed to exit in stopTimeout seconds of SIGTERM, then using the force
+		if err := daemon.containerStop(context.TODO(), c, containertypes.StopOptions{}); err != nil {
+			logrus.Errorf("Failed to stop container %s with error: %v", c.ID, err)
+			//return fmt.Errorf("Failed to stop container %s with error: %v", c.ID, err)
+		}
+	}()
 
+	select {
+	case <-time.After(10 * time.Second):
+		logrus.Debugf("container timeout exit %s", c.ID)
+		return nil
+	case <-c.Wait(context.Background(), container.WaitConditionNotRunning):
+	}
+	return nil
 	// Wait without timeout for the container to exit.
 	// Ignore the result.
-	<-c.Wait(context.Background(), container.WaitConditionNotRunning)
-	return nil
+	//<-c.Wait(context.Background(), container.WaitConditionNotRunning)
+	//return nil
 }
 
 // ShutdownTimeout returns the timeout (in seconds) before containers are forcibly
@@ -1243,48 +1256,57 @@ func (daemon *Daemon) Shutdown(ctx context.Context) error {
 				log.WithError(err).Error("failed to shut down container")
 				return
 			}
-			if mountid, err := daemon.imageService.GetLayerMountID(c.ID); err == nil {
-				daemon.cleanupMountsByID(mountid)
-			}
+			//if mountid, err := daemon.imageService.GetLayerMountID(c.ID); err == nil {
+			//	daemon.cleanupMountsByID(mountid)
+			//}
 			log.Debugf("shut down container")
 		})
 	}
 
 	if daemon.volumes != nil {
-		if err := daemon.volumes.Shutdown(); err != nil {
-			logrus.Errorf("Error shutting down volume store: %v", err)
-		}
+		logrus.Debugf("daemon.volumes.shutdown:")
+		go func() {
+			if err := daemon.volumes.Shutdown(); err != nil {
+				logrus.Errorf("Error shutting down volume store: %v", err)
+			}
+		}()
+		time.Sleep(3 * time.Second)
 	}
 
 	if daemon.imageService != nil {
-		if err := daemon.imageService.Cleanup(); err != nil {
-			logrus.Error(err)
-		}
+		logrus.Debugf("daemon.imageservice.cleanup:")
+		go func() {
+			if err := daemon.imageService.Cleanup(); err != nil {
+				logrus.Error(err)
+			}
+		}()
+		time.Sleep(3 * time.Second)
 	}
 
 	// If we are part of a cluster, clean up cluster's stuff
 	if daemon.clusterProvider != nil {
 		logrus.Debugf("start clean shutdown of cluster resources...")
-		daemon.DaemonLeavesCluster()
+		go daemon.DaemonLeavesCluster()
 	}
 
-	daemon.cleanupMetricsPlugins()
+	go daemon.cleanupMetricsPlugins()
 
 	// Shutdown plugins after containers and layerstore. Don't change the order.
 	daemon.pluginShutdown()
 
 	// trigger libnetwork Stop only if it's initialized
 	if daemon.netController != nil {
-		daemon.netController.Stop()
+		go daemon.netController.Stop()
 	}
 
 	if daemon.containerdCli != nil {
-		daemon.containerdCli.Close()
+		go daemon.containerdCli.Close()
 	}
 
 	if daemon.mdDB != nil {
-		daemon.mdDB.Close()
+		go daemon.mdDB.Close()
 	}
+	time.Sleep(30 * time.Second)
 
 	return daemon.cleanupMounts()
 }

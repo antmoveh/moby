@@ -310,10 +310,11 @@ func (cli *DaemonCli) start(opts *daemonOptions) (err error) {
 	apiWG.Wait()
 	close(errAPI)
 
-	c.Cleanup()
+	//c.Cleanup()
 
 	// notify systemd that we're shutting down
 	notifyStopping()
+	logrus.Debugf("shutdownDaemon...")
 	shutdownDaemon(ctx, d)
 
 	// Stop notification processing and any background processes
