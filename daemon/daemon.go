@@ -1287,26 +1287,32 @@ func (daemon *Daemon) Shutdown(ctx context.Context) error {
 	if daemon.clusterProvider != nil {
 		logrus.Debugf("start clean shutdown of cluster resources...")
 		go daemon.DaemonLeavesCluster()
+		time.Sleep(1 * time.Second)
 	}
 
 	go daemon.cleanupMetricsPlugins()
+	time.Sleep(1 * time.Second)
 
 	// Shutdown plugins after containers and layerstore. Don't change the order.
 	daemon.pluginShutdown()
+	time.Sleep(1 * time.Second)
 
 	// trigger libnetwork Stop only if it's initialized
 	if daemon.netController != nil {
 		go daemon.netController.Stop()
+		time.Sleep(1 * time.Second)
 	}
 
 	if daemon.containerdCli != nil {
 		go daemon.containerdCli.Close()
+		time.Sleep(1 * time.Second)
 	}
 
 	if daemon.mdDB != nil {
 		go daemon.mdDB.Close()
+		time.Sleep(1 * time.Second)
 	}
-	time.Sleep(30 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	return daemon.cleanupMounts()
 }

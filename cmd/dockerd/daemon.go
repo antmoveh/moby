@@ -965,6 +965,7 @@ func gcContainerLayers(root string, opts *daemonOptions) {
 			}
 		}
 
+		logrus.Debugf("remove container layer file %s", k)
 		err = os.RemoveAll(f)
 		if err != nil {
 			if !opts.GCHcs {
