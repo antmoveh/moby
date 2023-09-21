@@ -901,18 +901,26 @@ func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon, opts
 		select {
 		case <-ticker.C:
 			if opts.GCPrune {
-				logrus.Debug("ContainerPrune task start")
+				logrus.Debugf("OnlyContainersPrune: ... ")
+				n := time.Now()
 				err := d.OnlyContainersPrune(ctx)
 				if err != nil {
 					logrus.Debugf("ContainersPrune: err %s", err.Error())
 				}
+				logrus.Debugf("OnlyContainersPrune: done in %s", time.Since(n))
 			}
+			logrus.Debugf("GCContainer: ... ")
+			n := time.Now()
 			gcContainerLayers(root, opts)
+			logrus.Debugf("GCContainer: done in %s", time.Since(n))
 			if len(opts.GCDir) > 0 {
+				logrus.Debugf("GCContainerDir: ... ")
+				n := time.Now()
 				gcContainerDir(opts.GCDir, d)
+				logrus.Debugf("GCContainerDir: done in %s", time.Since(n))
 			}
 		case <-ctx.Done():
-			logrus.Debug("End the scheduled clearing task")
+			logrus.Debug("Stop scheduled task")
 			return
 		}
 	}
