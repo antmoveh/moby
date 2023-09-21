@@ -224,9 +224,14 @@ func (s *State) Wait(ctx context.Context, condition WaitCondition) <-chan StateS
 			return
 		case status := <-waitC:
 			resultC <- status
+		// TODO 15s must success
+		case <-time.After(15 * time.Second):
+			resultC <- StateStatus{
+				exitCode: int(condition),
+				err:      nil,
+			}
 		}
 	}()
-
 	return resultC
 }
 
