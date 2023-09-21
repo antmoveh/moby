@@ -219,7 +219,7 @@ func (daemon *Daemon) onlyCleanupContainer(container *container.Container, confi
 		logrus.Errorf("Error saving dying container to disk: %v", err)
 	}
 
-	if force {
+	if !force {
 		if container.RWLayer != nil {
 			logrus.Debugf("daemon.imageService.ReleaseLayer: id %s", container.ID)
 			if err := daemon.imageService.ReleaseLayer(container.RWLayer); err != nil {
