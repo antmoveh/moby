@@ -1024,7 +1024,7 @@ func gcContainerDir(dir string, d *daemon.Daemon, opt *daemonOptions) {
 		t1 := time.Now().Sub(fi.ModTime()).Seconds()
 		if err == nil {
 			if int(t1) < opt.GCForceTime*60 {
-				logrus.Debugf("wait deleting the container %ds, modTime %s", opt.GCForceTime*60, fi.ModTime().String())
+				logrus.Debugf("waiting to  delete container %s time %fs", containerId, t1)
 				continue
 			}
 		}
