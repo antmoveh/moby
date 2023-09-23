@@ -2,6 +2,8 @@ package daemon // import "github.com/docker/docker/daemon"
 
 import (
 	"context"
+	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"sync/atomic"
@@ -310,4 +312,34 @@ func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
 	//	Attributes: map[string]string{"reclaimed": strconv.FormatUint(0, 10)},
 	//})
 	return nil
+}
+
+var forceGC = false
+var gcDir = ""
+
+func SetForceGC(dir string) {
+	forceGC = true
+	gcDir = dir
+}
+
+func recordsContainerId(id string) {
+	if !forceGC || len(gcDir) == 0 {
+		return
+	}
+	if pathExists(path.Join(gcDir, id)) {
+		return
+	}
+	f, err := os.Create(path.Join(gcDir, id))
+	if err != nil {
+		logrus.Debugf("Failed to create file %s %s", id, err.Error())
+	}
+	defer f.Close()
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	return false
 }

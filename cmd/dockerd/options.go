@@ -77,10 +77,11 @@ type daemonOptions struct {
 	TLSOptions   *tlsconfig.Options
 	Validate     bool
 
-	GCTime  int
-	GCPrune bool
-	GCDir   string
-	GCHcs   bool
+	GCTime      int
+	GCPrune     bool
+	GCHcs       bool
+	GCForce     bool
+	GCForceTime int
 }
 
 // defaultCertPath uses $DOCKER_CONFIG or ~/.docker, and does not look up
@@ -120,10 +121,11 @@ func (o *daemonOptions) installFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&tlsOptions.KeyFile, "tlskey", filepath.Join(dockerCertPath, DefaultKeyFile), "Path to TLS key file")
 
 	// set default GC options
-	flags.StringVar(&o.GCDir, "gc-dir", "", "Directory to use for garbage collection")
 	flags.BoolVar(&o.GCPrune, "gc-prune", false, "Prune containers, images, and volumes")
 	flags.IntVar(&o.GCTime, "gc-time", 5, "Time to wait between runs of the garbage collector")
 	flags.BoolVar(&o.GCHcs, "gc-hcs", false, "Use HCS garbage collector")
+	flags.BoolVar(&o.GCForce, "gc-force", false, "Use HCS garbage collector")
+	flags.IntVar(&o.GCForceTime, "gc-force-time", 3, "more than three minutes to force gc")
 
 	hostOpt := opts.NewNamedListOptsRef("hosts", &o.Hosts, opts.ValidateHost)
 	flags.VarP(hostOpt, "host", "H", "Daemon socket(s) to connect to")

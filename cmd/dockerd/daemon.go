@@ -890,6 +890,18 @@ func overrideProxyEnv(name, val string) {
 }
 
 func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon, opts *daemonOptions) {
+	forceGCDir := "C:\\ProgramData\\docker\\gc"
+	if opts.GCForce {
+		if !pathExists(forceGCDir) {
+			err := os.MkdirAll(forceGCDir, 0755)
+			if err != nil {
+				logrus.Debugf("Failed to create gc dir %s", err.Error())
+				os.Exit(-1)
+			}
+		}
+		daemon.SetForceGC(forceGCDir)
+	}
+
 	logrus.Debug("Start GCContainer")
 	t := opts.GCTime
 	if t <= 0 {
@@ -900,7 +912,12 @@ func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon, opts
 	for {
 		select {
 		case <-ticker.C:
-			if opts.GCPrune {
+			if opts.GCForce {
+				logrus.Debugf("GCContainerDir: ... ")
+				n := time.Now()
+				gcContainerDir(forceGCDir, d, opts)
+				logrus.Debugf("GCContainerDir: done in %s", time.Since(n))
+			} else if opts.GCPrune {
 				logrus.Debugf("OnlyContainersPrune: ... ")
 				n := time.Now()
 				err := d.OnlyContainersPrune(ctx)
@@ -913,12 +930,6 @@ func cleanWindowsFilter(ctx context.Context, root string, d *daemon.Daemon, opts
 			n := time.Now()
 			gcContainerLayers(root, opts)
 			logrus.Debugf("GCContainer: done in %s", time.Since(n))
-			if len(opts.GCDir) > 0 {
-				logrus.Debugf("GCContainerDir: ... ")
-				n := time.Now()
-				gcContainerDir(opts.GCDir, d)
-				logrus.Debugf("GCContainerDir: done in %s", time.Since(n))
-			}
 		case <-ctx.Done():
 			logrus.Debug("Stop scheduled task")
 			return
@@ -996,8 +1007,8 @@ func gcContainerLayers(root string, opts *daemonOptions) {
 	}
 }
 
-func gcContainerDir(dir string, d *daemon.Daemon) {
-	logrus.Debug("gcContainerDir")
+func gcContainerDir(dir string, d *daemon.Daemon, opt *daemonOptions) {
+	logrus.Debug("force gcContainerDir")
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		logrus.Debugf("Failed to read containers directory %s  %s", dir, err.Error())
@@ -1009,20 +1020,13 @@ func gcContainerDir(dir string, d *daemon.Daemon) {
 			continue
 		}
 		containerId := file.Name()
-		if strings.HasPrefix(containerId, "delete") {
-			continue
-		}
-		force := false
 		fi, err := os.Stat(path.Join(dir, containerId))
 		t1 := time.Now().Sub(fi.ModTime()).Seconds()
 		if err == nil {
-			if t1 < 30 {
-				logrus.Debugf("wait deleting the container 30s, modTime %s", fi.ModTime().String())
+			if int(t1) < opt.GCForceTime*60 {
+				logrus.Debugf("wait deleting the container %ds, modTime %s", opt.GCForceTime*60, fi.ModTime().String())
 				continue
 			}
-		}
-		if t1 > 120 {
-			force = true
 		}
 		logrus.Debugf("gcContainerDir container rm: %s", containerId)
 		conf := &types.ContainerRmConfig{
@@ -1030,15 +1034,23 @@ func gcContainerDir(dir string, d *daemon.Daemon) {
 			RemoveVolume: false,
 			RemoveLink:   false,
 		}
-		err = d.OnlyContainerRm(containerId, conf, force)
+		err = d.OnlyContainerRm(containerId, conf, true)
 		if err != nil {
 			logrus.Debugf("container rm error %s", err.Error())
 			continue
 		}
 		logrus.Debugf("container %s rm success", containerId)
-		err = os.Rename(path.Join(dir, containerId), path.Join(dir, "delete_"+containerId))
+		err = os.Remove(path.Join(dir, containerId))
 		if err != nil {
 			logrus.Debugf("rename error %s %s", containerId, err.Error())
 		}
 	}
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	return false
 }

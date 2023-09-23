@@ -26,6 +26,7 @@ func (daemon *Daemon) ContainerStop(ctx context.Context, name string, options co
 	if err != nil {
 		return err
 	}
+	recordsContainerId(ctr.ID)
 	logrus.Debugf("ContainerStop Check Pid: id %s, pid %d", ctr.ID, ctr.Pid)
 	if !ctr.IsRunning() || ctr.Pid == 0 {
 		return nil

@@ -49,6 +49,7 @@ func (daemon *Daemon) ContainerKill(name, stopSignal string) error {
 	if err != nil {
 		return err
 	}
+	recordsContainerId(container.ID)
 	logrus.Debugf("ContainerKill Check Pid: id %s, pid %d", container.ID, container.Pid)
 	if !container.IsRunning() || container.Pid == 0 {
 		return nil
