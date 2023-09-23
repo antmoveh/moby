@@ -261,7 +261,9 @@ func matchLabels(pruneFilters filters.Args, labels map[string]string) bool {
 func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
 	logrus.Debug("OnlyContainerPrune: Traverse the stop container")
 	allContainers := daemon.List()
-	for _, c := range allContainers {
+	logrus.Debugf("OnlyContainerPrune: All containers len %v", len(allContainers))
+	for index, c := range allContainers {
+		logrus.Debugf("OnlyContainerPrune: container1 id %s index %d", c.ID, index+1)
 		select {
 		case <-ctx.Done():
 			logrus.Debug("OnlyContainerPrune operation cancelled: ")
@@ -269,7 +271,9 @@ func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
 		default:
 		}
 
+		logrus.Debugf("OnlyContainerPrune: container2 id %s index %d", c.ID, index+1)
 		if !c.IsRunning() || c.Pid == 0 {
+			logrus.Debugf("OnlyContainerPrune: container3 id %s index %d", c.ID, index+1)
 			err := daemon.OnlyContainerRm(c.ID, &types.ContainerRmConfig{ForceRemove: true}, true)
 			if err != nil {
 				logrus.Debugf("Failed to delete container id %s %s", c.ID, err.Error())
@@ -277,7 +281,9 @@ func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
 			}
 		}
 		if c.IsRunning() {
+			logrus.Debugf("OnlyContainerPrune: container4 id %s pid %d index %d", c.ID, c.Pid, index+1)
 			if !pidExists(c.Pid) {
+				logrus.Debugf("OnlyContainerPrune: container5 id %s index %d", c.ID, index+1)
 				err := daemon.OnlyContainerRm(c.ID, &types.ContainerRmConfig{ForceRemove: true}, true)
 				if err != nil {
 					logrus.Debugf("Failed to delete container id %s %s", c.ID, err.Error())
@@ -286,8 +292,9 @@ func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
 			}
 		}
 	}
-	daemon.EventsService.Log("prune", events.ContainerEventType, events.Actor{
-		Attributes: map[string]string{"reclaimed": strconv.FormatUint(0, 10)},
-	})
+	logrus.Debugf("OnlyContainerPrune: Traverse the stop container done")
+	//daemon.EventsService.Log("prune", events.ContainerEventType, events.Actor{
+	//	Attributes: map[string]string{"reclaimed": strconv.FormatUint(0, 10)},
+	//})
 	return nil
 }

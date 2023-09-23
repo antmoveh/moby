@@ -265,7 +265,7 @@ func (daemon *Daemon) onlyCleanupContainer(container *container.Container, confi
 	container.OnlySetRemovalError(nil)
 	stateCtr.OnlyDel(container.ID)
 
-	daemon.LogContainerEvent(container, "destroy")
+	go daemon.LogContainerEvent(container, "destroy")
 
 	return nil
 }
@@ -314,7 +314,9 @@ func pidExists(pid int) bool {
 		return false
 	}
 	defer windows.CloseHandle(h)
+	logrus.Debugf("pidExists3: pid %d", pid)
 	event, err := windows.WaitForSingleObject(h, 0)
+	log.Debugf("pidExists4: pid %d event %d", pid, event)
 	return event == uint32(windows.WAIT_TIMEOUT)
 }
 
