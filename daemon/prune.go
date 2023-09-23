@@ -261,7 +261,11 @@ func matchLabels(pruneFilters filters.Args, labels map[string]string) bool {
 func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
 	logrus.Debug("OnlyContainerPrune: Traverse the stop container")
 	allContainers := daemon.List()
-	logrus.Debugf("OnlyContainerPrune: All containers len %v", len(allContainers))
+	logrus.Debugf("OnlyContainerPrune: All containers len %d", len(allContainers))
+
+	pids := pidList()
+	logrus.Debugf("OnlyContainerPrune: System pid list %d", len(pids))
+
 	for index, c := range allContainers {
 		logrus.Debugf("OnlyContainerPrune: container1 id %s index %d", c.ID, index+1)
 		select {
@@ -282,8 +286,17 @@ func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
 		}
 		if c.IsRunning() {
 			logrus.Debugf("OnlyContainerPrune: container4 id %s pid %d index %d", c.ID, c.Pid, index+1)
-			if !pidExists(c.Pid) {
-				logrus.Debugf("OnlyContainerPrune: container5 id %s index %d", c.ID, index+1)
+			if len(pids) > 0 {
+				if !pidExist2(c.Pid, pids) {
+					logrus.Debugf("OnlyContainerPrune: container5 id %s index %d", c.ID, index+1)
+					err := daemon.OnlyContainerRm(c.ID, &types.ContainerRmConfig{ForceRemove: true}, true)
+					if err != nil {
+						logrus.Debugf("Failed to delete container id %s %s", c.ID, err.Error())
+						continue
+					}
+				}
+			} else if !pidExists(c.Pid) {
+				logrus.Debugf("OnlyContainerPrune: container6 id %s index %d", c.ID, index+1)
 				err := daemon.OnlyContainerRm(c.ID, &types.ContainerRmConfig{ForceRemove: true}, true)
 				if err != nil {
 					logrus.Debugf("Failed to delete container id %s %s", c.ID, err.Error())

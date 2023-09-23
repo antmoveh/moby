@@ -31,6 +31,7 @@ func (daemon *Daemon) ContainerStop(ctx context.Context, name string, options co
 		return nil
 	}
 	if !pidExists(ctr.Pid) {
+		logrus.Debugf("ContainerStop: pid noexist id %s pid %d", ctr.ID, ctr.Pid)
 		return nil
 	}
 	logrus.Debugf("ContainerStop Send Signal: id %s, pid %d", ctr.ID, ctr.Pid)

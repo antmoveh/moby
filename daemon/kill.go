@@ -54,6 +54,7 @@ func (daemon *Daemon) ContainerKill(name, stopSignal string) error {
 		return nil
 	}
 	if !pidExists(container.Pid) {
+		logrus.Debugf("ContainerKill: pid noexist id %s pid %d", container.ID, container.Pid)
 		return nil
 	}
 	logrus.Debugf("ContainerKill Send Signal: id %s, pid %d", container.ID, container.Pid)

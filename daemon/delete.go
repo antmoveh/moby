@@ -39,12 +39,6 @@ func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) 
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
 	}
-	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
-		logrus.Debugf("onlyCleanupContainer2: id %s pid %d", ctr.ID, ctr.Pid)
-		daemon.onlyCleanupContainer(ctr, *config, true)
-		containerActions.WithValues("delete").UpdateSince(start)
-		return nil
-	}
 
 	logrus.Debugf("setRemovalInProgress: name: %s", name)
 	// Container state RemovalInProgress should be used to avoid races.
@@ -320,6 +314,39 @@ func pidExists(pid int) bool {
 	return event == uint32(windows.WAIT_TIMEOUT)
 }
 
+func pidList() []int {
+	var ret []int
+	var read uint32 = 0
+	var psSize uint32 = 1024
+	const dwordSize uint32 = 4
+
+	for {
+		ps := make([]uint32, psSize)
+		if err := windows.EnumProcesses(ps, &read); err != nil {
+			fmt.Println(err.Error())
+			return ret
+		}
+		if uint32(len(ps)) == read { // ps buffer was too small to host every results, retry with a bigger one
+			psSize += 1024
+			continue
+		}
+		for _, pid := range ps[:read/dwordSize] {
+			ret = append(ret, int(pid))
+		}
+		break
+	}
+	return ret
+}
+
+func pidExist2(pid int, pids []int) bool {
+	for _, p := range pids {
+		if pid == p {
+			return true
+		}
+	}
+	return false
+}
+
 // OnlyContainerRm removes the container id from the filesystem. An error
 // is returned if the container is not found, or if the remove
 // fails. If the remove succeeds, the container name is released, and
@@ -340,12 +367,6 @@ func (daemon *Daemon) OnlyContainerRm(name string, config *types.ContainerRmConf
 	}
 	if ctr.Pid == 0 {
 		logrus.Debugf("onlyCleanupContainer1: id %s pid %d", ctr.ID, ctr.Pid)
-		daemon.onlyCleanupContainer(ctr, *config, true)
-		containerActions.WithValues("delete").UpdateSince(start)
-		return nil
-	}
-	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
-		logrus.Debugf("onlyCleanupContainer2: id %s pid %d", ctr.ID, ctr.Pid)
 		daemon.onlyCleanupContainer(ctr, *config, true)
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
