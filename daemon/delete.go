@@ -39,6 +39,14 @@ func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) 
 		containerActions.WithValues("delete").UpdateSince(start)
 		return nil
 	}
+
+	if ctr.Pid > 0 && !pidExists(ctr.Pid) {
+		logrus.Debugf("onlyCleanupContainer2: id %s pid %d", ctr.ID, ctr.Pid)
+		daemon.onlyCleanupContainer(ctr, *config, true)
+		containerActions.WithValues("delete").UpdateSince(start)
+		return nil
+	}
+
 	recordsContainerId(ctr.ID)
 	logrus.Debugf("setRemovalInProgress: name: %s", name)
 	// Container state RemovalInProgress should be used to avoid races.
@@ -259,7 +267,7 @@ func (daemon *Daemon) onlyCleanupContainer(container *container.Container, confi
 	container.OnlySetRemovalError(nil)
 	stateCtr.OnlyDel(container.ID)
 
-	go daemon.LogContainerEvent(container, "destroy")
+	daemon.LogContainerEvent(container, "destroy")
 
 	return nil
 }

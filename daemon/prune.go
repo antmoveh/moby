@@ -308,9 +308,9 @@ func (daemon *Daemon) OnlyContainersPrune(ctx context.Context) error {
 		}
 	}
 	logrus.Debugf("OnlyContainerPrune: Traverse the stop container done")
-	//daemon.EventsService.Log("prune", events.ContainerEventType, events.Actor{
-	//	Attributes: map[string]string{"reclaimed": strconv.FormatUint(0, 10)},
-	//})
+	daemon.EventsService.Log("prune", events.ContainerEventType, events.Actor{
+		Attributes: map[string]string{"reclaimed": strconv.FormatUint(0, 10)},
+	})
 	return nil
 }
 
